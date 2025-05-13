@@ -194,7 +194,7 @@ def main():
             gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
             ax.cla()
             ax.hist(gray.ravel(), 256, [0, 256])
-            fig_place.pyplot(fig)
+            # fig_place.pyplot(fig)
 
         # cap = cv2.VideoCapture(0)
 
