@@ -1,3 +1,4 @@
+import threading
 import streamlit as st
 import cv2
 import mediapipe as mp
@@ -9,6 +10,8 @@ import threading
 from PIL import Image, ImageFont, ImageDraw
 import arabic_reshaper
 from bidi.algorithm import get_display
+from streamlit_webrtc import webrtc_streamer
+from matplotlib import pyplot as plt
 
 # Initialize session state
 if 'stop_button' not in st.session_state:
@@ -16,8 +19,36 @@ if 'stop_button' not in st.session_state:
 if 'camera_running' not in st.session_state:
     st.session_state['camera_running'] = True
 
+lock = threading.Lock()
+img_container = {"img": None}
+
+def video_frame_callback(frame):
+    img = frame.to_ndarray(format="bgr24")
+    with lock:
+        img_container["img"] = img
+
+    return frame
+
+
+ctx = webrtc_streamer(key="example", video_frame_callback=video_frame_callback)
+
+fig_place = st.empty()
+fig, ax = plt.subplots(1, 1)
+
+while ctx.state.playing:
+    with lock:
+        img = img_container["img"]
+    if img is None:
+        continue
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    ax.cla()
+    ax.hist(gray.ravel(), 256, [0, 256])
+    fig_place.pyplot(fig)
+
+
+
 # Initialize pygame for audio playback
-os.environ["SDL_AUDIODRIVER"] = "dummy"
+# os.environ["SDL_AUDIODRIVER"] = "dummy"
 pygame.mixer.init()
 last_played_gesture = None
 
@@ -150,34 +181,48 @@ def main():
         prediction_placeholder = st.empty()
         confidence_placeholder = st.empty()
         stop_button = st.button("إيقاف")
+        ctx = webrtc_streamer(key="example", video_frame_callback=video_frame_callback)
 
-        cap = cv2.VideoCapture(0)
+        fig_place = st.empty()
+        fig, ax = plt.subplots(1, 1)
 
-        try:
-            while cap.isOpened() and not stop_button:
-                ret, frame = cap.read()
-                if not ret:
-                    st.error("فشل في تشغيل الكاميرا")
-                    break
+        while ctx.state.playing:
+            with lock:
+                img = img_container["img"]
+            if img is None:
+                continue
+            gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+            ax.cla()
+            ax.hist(gray.ravel(), 256, [0, 256])
+            fig_place.pyplot(fig)
 
-                gesture, hand_landmarks, confidence = classify_gesture(frame)
+        # cap = cv2.VideoCapture(0)
 
-                if hand_landmarks:
-                    for landmarks in hand_landmarks:
-                        mp.solutions.drawing_utils.draw_landmarks(frame, landmarks, mp_hands.HAND_CONNECTIONS)
+        # try:
+        #     while cap.isOpened() and not stop_button:
+        #         ret, frame = cap.read()
+        #         if not ret:
+        #             st.error("فشل في تشغيل الكاميرا")
+        #             break
 
-                if gesture:
-                    frame = draw_text_with_arabic(frame, f"الإشارة: {gesture}", (frame.shape[1] // 2, 50))
-                    prediction_placeholder.text(f"الإشارة المكتشفة: {gesture}")
-                    if confidence:
-                        confidence_placeholder.write(f"نسبة الثقة: {confidence:.2%}")
-                    play_audio_for_gesture(gesture)
+        #         gesture, hand_landmarks, confidence = classify_gesture(frame)
 
-                video_placeholder.image(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB), channels="RGB", use_column_width=True)
+        #         if hand_landmarks:
+        #             for landmarks in hand_landmarks:
+        #                 mp.solutions.drawing_utils.draw_landmarks(frame, landmarks, mp_hands.HAND_CONNECTIONS)
 
-        finally:
-            cap.release()
-            st.session_state['camera_running'] = False
+        #         if gesture:
+        #             frame = draw_text_with_arabic(frame, f"الإشارة: {gesture}", (frame.shape[1] // 2, 50))
+        #             prediction_placeholder.text(f"الإشارة المكتشفة: {gesture}")
+        #             if confidence:
+        #                 confidence_placeholder.write(f"نسبة الثقة: {confidence:.2%}")
+        #             play_audio_for_gesture(gesture)
+
+        #         video_placeholder.image(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB), channels="RGB", use_column_width=True)
+
+        # finally:
+        #     cap.release()
+        #     st.session_state['camera_running'] = False
 
 if __name__ == "__main__":
     main()
