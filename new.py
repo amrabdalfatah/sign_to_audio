@@ -17,6 +17,7 @@ if 'camera_running' not in st.session_state:
     st.session_state['camera_running'] = True
 
 # Initialize pygame for audio playback
+os.environ["SDL_AUDIODRIVER"] = "dummy"
 pygame.mixer.init()
 last_played_gesture = None
 
